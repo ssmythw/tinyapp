@@ -34,7 +34,7 @@
           <form method="POST" action=<%= `/urls/${id}/delete` %>
             <tr>
               <td><%= id %></td>
-              <td><%= urls[id] %></td>
+              <td><%= urls[id].longURL %></td>
               <td>
                 <a href="/urls/<%= id %>" class="btn btn-outline-primary" role="button">Edit</a>
               </td>
