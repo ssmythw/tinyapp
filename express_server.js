@@ -1,5 +1,7 @@
 const express = require("express");
-var cookieParser = require("cookie-parser");
+var cookieSession = require("cookie-session");
+const { findUser } = require("./helpers");
+const bcrypt = require("bcryptjs");
 const app = express();
 const PORT = 8080; // default port 8080
 
@@ -29,16 +31,12 @@ const users = {
 
 app.set("view engine", "ejs");
 app.use(express.urlencoded({ extended: true }));
-app.use(cookieParser());
-
-function idExists(id) {
-  for (let item of urlDatabase) {
-    console.log("Passed in ID: " + id);
-    console.log("Item in DB: " + item);
-    if (item === id) return true;
-  }
-  return false;
-}
+app.use(
+  cookieSession({
+    name: "session",
+    keys: ["key1"],
+  })
+);
 
 function filterURLs(id) {
   let filteredList = {};
@@ -50,13 +48,6 @@ function filterURLs(id) {
   return filteredList;
 }
 
-function findUser(email) {
-  for (let key in users) {
-    if (users[key].email === email) return users[key];
-  }
-  return null;
-}
-
 function generateRandomString() {
   // string code taken from stack overflow
   // https://stackoverflow.com/questions/1349404/generate-random-string-characters-in-javascript
@@ -65,33 +56,38 @@ function generateRandomString() {
 }
 
 app.get("/", (req, res) => {
-  res.send("Hello!");
+  const user = users[req.session.user_id];
+  if (user) {
+    res.redirect("/urls");
+  } else {
+    res.redirect("/login");
+  }
 });
 
 app.get("/urls", (req, res) => {
-  const user = users[req.cookies.user_id];
+  const user = users[req.session.user_id];
   if (!user) {
-    res.send("You need to be logged in to shorten URLs");
+    res.status(404).send("You need to be logged in to shorten URLs");
   }
-  const filteredURLs = filterURLs(req.cookies.user_id);
+  const filteredURLs = filterURLs(req.session.user_id);
   const templateVars = { user, urls: filteredURLs };
   res.render("urls_index", templateVars);
 });
 
 app.post("/urls", (req, res) => {
-  const user = users[req.cookies.user_id];
+  const user = users[req.session.user_id];
   if (!user) {
     res.send("You need to be logged in to shorten URLs");
   }
   const id = generateRandomString();
   urlDatabase[id] = {};
   urlDatabase[id].longURL = req.body.longURL;
-  urlDatabase[id].userID = req.cookies.user_id;
+  urlDatabase[id].userID = req.session.user_id;
   res.redirect(`/urls/${id}`);
 });
 
 app.get("/register", (req, res) => {
-  const user = users[req.cookies.user_id];
+  const user = users[req.session.user_id];
   if (user) {
     res.redirect("/urls");
   }
@@ -100,7 +96,7 @@ app.get("/register", (req, res) => {
 });
 
 app.get("/login", (req, res) => {
-  const user = users[req.cookies.user_id];
+  const user = users[req.session.user_id];
   if (user) {
     res.redirect("/urls");
   }
@@ -109,29 +105,31 @@ app.get("/login", (req, res) => {
 });
 
 app.get("/logout", (req, res) => {
-  res.clearCookie("user_id");
+  req.session = null;
   res.redirect("/login");
 });
 
 app.post("/register", (req, res) => {
   if (!req.body.email || !req.body.password) {
     res.status(400).send("Email and password are required.");
-  } else if (findUser(req.body.email)) {
+  } else if (findUser(req.body.email, users)) {
     res.status(400).send("User already exists.");
   } else {
+    const password = req.body.password;
+    const hashedPassword = bcrypt.hashSync(password, 10);
     const user_id = generateRandomString();
     users[user_id] = {
       id: user_id,
       email: req.body.email,
-      password: req.body.password,
+      password: hashedPassword,
     };
-    res.cookie("user_id", user_id);
+    req.session.user_id = user_id;
     res.redirect("/urls");
   }
 });
 
 app.get("/urls/new", (req, res) => {
-  const user = users[req.cookies.user_id];
+  const user = users[req.session.user_id];
   if (!user) {
     res.redirect("/login");
   }
@@ -144,24 +142,25 @@ app.post("/login", (req, res) => {
   if (!user) {
     res.status(403).send("A user with that email can't be found");
   }
-  if (user.password !== req.body.password) {
+  if (bcrypt.compareSync(req.body.password, user.password)) {
+    req.session.user_id = user.id;
+    res.redirect("/urls");
+  } else {
     res.status(403).send("Incorrect password");
   }
-  res.cookie("user_id", user.id);
-  res.redirect("/urls");
 });
 
 app.post("/urls/:id/delete", (req, res) => {
   if (urlDatabase[req.params.id] === undefined) {
     res.status(404).send("ID does not exist");
   }
-  const user = users[req.cookies.user_id];
+  const user = users[req.session.user_id];
   if (!user) {
     res.status(404).send("Need to be logged in to view this page.");
   }
   if (
     urlDatabase[req.params.id] &&
-    urlDatabase[req.params.id].userID !== req.cookies.user_id
+    urlDatabase[req.params.id].userID !== req.session.user_id
   ) {
     res.status(404).send("User does not own the URL");
   }
@@ -175,13 +174,13 @@ app.post("/urls/:id", (req, res) => {
   if (urlDatabase[req.params.id] === undefined) {
     res.status(404).send("ID does not exist");
   }
-  const user = users[req.cookies.user_id];
+  const user = users[req.session.user_id];
   if (!user) {
     res.status(404).send("Need to be logged in to view this page.");
   }
   if (
     urlDatabase[req.params.id] &&
-    urlDatabase[req.params.id].userID !== req.cookies.user_id
+    urlDatabase[req.params.id].userID !== req.session.user_id
   ) {
     res.status(404).send("User does not own the URL");
   }
@@ -196,7 +195,7 @@ app.get("/u/:id", (req, res) => {
 });
 
 app.get("/urls/:id", (req, res) => {
-  const user = users[req.cookies.user_id];
+  const user = users[req.session.user_id];
   if (!user) {
     res.status(404).send("Need to be logged in to view this page.");
   }
