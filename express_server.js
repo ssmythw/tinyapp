@@ -109,6 +109,11 @@ app.get("/logout", (req, res) => {
   res.redirect("/login");
 });
 
+app.post("/logout", (req, res) => {
+  req.session = null;
+  res.redirect("/login");
+});
+
 app.post("/register", (req, res) => {
   if (!req.body.email || !req.body.password) {
     res.status(400).send("Email and password are required.");
@@ -190,6 +195,10 @@ app.post("/urls/:id", (req, res) => {
 });
 
 app.get("/u/:id", (req, res) => {
+  if (urlDatabase[req.params.id] === undefined) {
+    res.status(404).send("ID does not exist");
+  }
+
   const longURL = urlDatabase[req.params.id];
   res.redirect(longURL);
 });
@@ -201,6 +210,12 @@ app.get("/urls/:id", (req, res) => {
   }
   if (urlDatabase[req.params.id] === undefined) {
     res.status(404).send("ID does not exist");
+  }
+  if (
+    urlDatabase[req.params.id] &&
+    urlDatabase[req.params.id].userID !== req.session.user_id
+  ) {
+    res.status(404).send("User does not own the URL");
   }
   const templateVars = {
     id: req.params.id,
