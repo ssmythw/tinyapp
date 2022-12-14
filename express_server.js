@@ -1,6 +1,6 @@
 const express = require("express");
 var cookieSession = require("cookie-session");
-const { findUser } = require("./helpers");
+const { findUser, filterURLs, generateRandomString } = require("./helpers");
 const bcrypt = require("bcryptjs");
 const app = express();
 const PORT = 8080; // default port 8080
@@ -34,26 +34,10 @@ app.use(express.urlencoded({ extended: true }));
 app.use(
   cookieSession({
     name: "session",
-    keys: ["key1"],
+    keys: [""],
+    maxAge: 24 * 60 * 60 * 1000,
   })
 );
-
-function filterURLs(id) {
-  let filteredList = {};
-  for (let key in urlDatabase) {
-    if (urlDatabase[key].userID === id) {
-      filteredList[key] = urlDatabase[key];
-    }
-  }
-  return filteredList;
-}
-
-function generateRandomString() {
-  // string code taken from stack overflow
-  // https://stackoverflow.com/questions/1349404/generate-random-string-characters-in-javascript
-  let string = Math.random().toString(36).slice(2, 8);
-  return string;
-}
 
 app.get("/", (req, res) => {
   const user = users[req.session.user_id];
@@ -69,7 +53,7 @@ app.get("/urls", (req, res) => {
   if (!user) {
     res.status(404).send("You need to be logged in to shorten URLs");
   }
-  const filteredURLs = filterURLs(req.session.user_id);
+  const filteredURLs = filterURLs(req.session.user_id, urlDatabase);
   const templateVars = { user, urls: filteredURLs };
   res.render("urls_index", templateVars);
 });
@@ -137,17 +121,17 @@ app.get("/urls/new", (req, res) => {
   const user = users[req.session.user_id];
   if (!user) {
     res.redirect("/login");
+  } else {
+    const templateVars = { user };
+    res.render("urls_new", templateVars);
   }
-  const templateVars = { user };
-  res.render("urls_new", templateVars);
 });
 
 app.post("/login", (req, res) => {
-  const user = findUser(req.body.email);
+  const user = findUser(req.body.email, users);
   if (!user) {
     res.status(403).send("A user with that email can't be found");
-  }
-  if (bcrypt.compareSync(req.body.password, user.password)) {
+  } else if (bcrypt.compareSync(req.body.password, user.password)) {
     req.session.user_id = user.id;
     res.redirect("/urls");
   } else {
@@ -156,73 +140,70 @@ app.post("/login", (req, res) => {
 });
 
 app.post("/urls/:id/delete", (req, res) => {
+  const user = users[req.session.user_id];
   if (urlDatabase[req.params.id] === undefined) {
     res.status(404).send("ID does not exist");
-  }
-  const user = users[req.session.user_id];
-  if (!user) {
+  } else if (!user) {
     res.status(404).send("Need to be logged in to view this page.");
-  }
-  if (
+  } else if (
     urlDatabase[req.params.id] &&
     urlDatabase[req.params.id].userID !== req.session.user_id
   ) {
     res.status(404).send("User does not own the URL");
+  } else {
+    delete urlDatabase[req.params.id];
+    res.redirect("/urls");
   }
-  delete urlDatabase[req.params.id];
-  res.redirect("/urls");
 });
 
 app.post("/urls/:id", (req, res) => {
   //check if ID even exists in the database
   //take the id from the URL and check if it is in the DB (use function)
+  const user = users[req.session.user_id];
   if (urlDatabase[req.params.id] === undefined) {
     res.status(404).send("ID does not exist");
-  }
-  const user = users[req.session.user_id];
-  if (!user) {
+  } else if (!user) {
     res.status(404).send("Need to be logged in to view this page.");
-  }
-  if (
+  } else if (
     urlDatabase[req.params.id] &&
     urlDatabase[req.params.id].userID !== req.session.user_id
   ) {
     res.status(404).send("User does not own the URL");
+  } else {
+    urlDatabase[req.params.id] = {};
+    urlDatabase[req.params.id].longURL = req.body.longURL;
+    res.redirect("/urls");
   }
-  urlDatabase[req.params.id] = {};
-  urlDatabase[req.params.id].longURL = req.body.longURL;
-  res.redirect("/urls");
 });
 
 app.get("/u/:id", (req, res) => {
   if (urlDatabase[req.params.id] === undefined) {
     res.status(404).send("ID does not exist");
+  } else {
+    const longURL = urlDatabase[req.params.id];
+    res.redirect(longURL);
   }
-
-  const longURL = urlDatabase[req.params.id];
-  res.redirect(longURL);
 });
 
 app.get("/urls/:id", (req, res) => {
   const user = users[req.session.user_id];
   if (!user) {
     res.status(404).send("Need to be logged in to view this page.");
-  }
-  if (urlDatabase[req.params.id] === undefined) {
+  } else if (urlDatabase[req.params.id] === undefined) {
     res.status(404).send("ID does not exist");
-  }
-  if (
+  } else if (
     urlDatabase[req.params.id] &&
     urlDatabase[req.params.id].userID !== req.session.user_id
   ) {
     res.status(404).send("User does not own the URL");
+  } else {
+    const templateVars = {
+      id: req.params.id,
+      longURL: urlDatabase[req.params.id].longURL,
+      user,
+    };
+    res.render("urls_show", templateVars);
   }
-  const templateVars = {
-    id: req.params.id,
-    longURL: urlDatabase[req.params.id].longURL,
-    user,
-  };
-  res.render("urls_show", templateVars);
 });
 
 app.listen(PORT, () => {
