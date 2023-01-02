@@ -1,9 +1,15 @@
+//findUSer takes in an email and a database object and loops through the database until the user
+//with the supplied email is found. If no user is found then null is returned.
 function findUser(email, database) {
   for (let key in database) {
     if (database[key].email === email) return database[key];
   }
   return null;
 }
+
+//filterURLs takes in an id and a database object and loops through the database to check for
+//URLS that are owned by the user with the supplied id. A new object is created and populated
+//with a new URL each time a matching one is found (userID === id).
 
 function filterURLs(id, database) {
   let filteredList = {};
@@ -14,6 +20,9 @@ function filterURLs(id, database) {
   }
   return filteredList;
 }
+
+//generateRandomString uses a simple algorithm to create a random string
+//that is 6 characters long
 
 function generateRandomString() {
   // string code taken from stack overflow

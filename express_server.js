@@ -1,33 +1,11 @@
 const express = require("express");
 var cookieSession = require("cookie-session");
 const { findUser, filterURLs, generateRandomString } = require("./helpers");
+const { urlDatabase } = require("./database");
+const { users } = require("./users");
 const bcrypt = require("bcryptjs");
 const app = express();
 const PORT = 8080; // default port 8080
-
-const urlDatabase = {
-  b6UTxQ: {
-    longURL: "https://www.tsn.ca",
-    userID: "aJ48lW",
-  },
-  i3BoGr: {
-    longURL: "https://www.google.ca",
-    userID: "aJ48lW",
-  },
-};
-
-const users = {
-  userRandomID: {
-    id: "userRandomID",
-    email: "user@example.com",
-    password: "purple-monkey-dinosaur",
-  },
-  user2RandomID: {
-    id: "user2RandomID",
-    email: "user2@example.com",
-    password: "dishwasher-funk",
-  },
-};
 
 app.set("view engine", "ejs");
 app.use(express.urlencoded({ extended: true }));
@@ -53,6 +31,8 @@ app.get("/urls", (req, res) => {
   if (!user) {
     res.status(404).send("You need to be logged in to shorten URLs");
   }
+  //if user exists, filter the URLS and send them as template variables to ejs template
+  //then render the urls_index page
   const filteredURLs = filterURLs(req.session.user_id, urlDatabase);
   const templateVars = { user, urls: filteredURLs };
   res.render("urls_index", templateVars);
@@ -63,6 +43,8 @@ app.post("/urls", (req, res) => {
   if (!user) {
     res.send("You need to be logged in to shorten URLs");
   }
+  // if user exists, generate a randoms string, set the longURL and userID values
+  //into a new item object in the urlDatabase. Afterwards, redirect to the urls/generatedString
   const id = generateRandomString();
   urlDatabase[id] = {};
   urlDatabase[id].longURL = req.body.longURL;
@@ -72,6 +54,7 @@ app.post("/urls", (req, res) => {
 
 app.get("/register", (req, res) => {
   const user = users[req.session.user_id];
+  //if user exists redirect to /urls else render the urls_register template
   if (user) {
     res.redirect("/urls");
   }
@@ -81,6 +64,7 @@ app.get("/register", (req, res) => {
 
 app.get("/login", (req, res) => {
   const user = users[req.session.user_id];
+  //if user exists redirect to /urls else render the urls_login template
   if (user) {
     res.redirect("/urls");
   }
@@ -104,6 +88,8 @@ app.post("/register", (req, res) => {
   } else if (findUser(req.body.email, users)) {
     res.status(400).send("User already exists.");
   } else {
+    //get users password, hash it. Then generate id for the user and store the new user
+    //in the users object.
     const password = req.body.password;
     const hashedPassword = bcrypt.hashSync(password, 10);
     const user_id = generateRandomString();
@@ -170,7 +156,6 @@ app.post("/urls/:id", (req, res) => {
   ) {
     res.status(404).send("User does not own the URL");
   } else {
-    urlDatabase[req.params.id] = {};
     urlDatabase[req.params.id].longURL = req.body.longURL;
     res.redirect("/urls");
   }
