@@ -30,26 +30,28 @@ app.get("/urls", (req, res) => {
   const user = users[req.session.user_id];
   if (!user) {
     res.status(404).send("You need to be logged in to shorten URLs");
+  } else {
+    //if user exists, filter the URLS and send them as template variables to ejs template
+    //then render the urls_index page
+    const filteredURLs = filterURLs(req.session.user_id, urlDatabase);
+    const templateVars = { user, urls: filteredURLs };
+    res.render("urls_index", templateVars);
   }
-  //if user exists, filter the URLS and send them as template variables to ejs template
-  //then render the urls_index page
-  const filteredURLs = filterURLs(req.session.user_id, urlDatabase);
-  const templateVars = { user, urls: filteredURLs };
-  res.render("urls_index", templateVars);
 });
 
 app.post("/urls", (req, res) => {
   const user = users[req.session.user_id];
   if (!user) {
     res.send("You need to be logged in to shorten URLs");
+  } else {
+    // if user exists, generate a randoms string, set the longURL and userID values
+    //into a new item object in the urlDatabase. Afterwards, redirect to the urls/generatedString
+    const id = generateRandomString();
+    urlDatabase[id] = {};
+    urlDatabase[id].longURL = req.body.longURL;
+    urlDatabase[id].userID = req.session.user_id;
+    res.redirect(`/urls/${id}`);
   }
-  // if user exists, generate a randoms string, set the longURL and userID values
-  //into a new item object in the urlDatabase. Afterwards, redirect to the urls/generatedString
-  const id = generateRandomString();
-  urlDatabase[id] = {};
-  urlDatabase[id].longURL = req.body.longURL;
-  urlDatabase[id].userID = req.session.user_id;
-  res.redirect(`/urls/${id}`);
 });
 
 app.get("/register", (req, res) => {
@@ -57,9 +59,10 @@ app.get("/register", (req, res) => {
   //if user exists redirect to /urls else render the urls_register template
   if (user) {
     res.redirect("/urls");
+  } else {
+    const templateVars = { user };
+    res.render("urls_register", templateVars);
   }
-  const templateVars = { user };
-  res.render("urls_register", templateVars);
 });
 
 app.get("/login", (req, res) => {
@@ -67,9 +70,10 @@ app.get("/login", (req, res) => {
   //if user exists redirect to /urls else render the urls_login template
   if (user) {
     res.redirect("/urls");
+  } else {
+    const templateVars = { user };
+    res.render("urls_login", templateVars);
   }
-  const templateVars = { user };
-  res.render("urls_login", templateVars);
 });
 
 app.get("/logout", (req, res) => {
@@ -165,7 +169,7 @@ app.get("/u/:id", (req, res) => {
   if (urlDatabase[req.params.id] === undefined) {
     res.status(404).send("ID does not exist");
   } else {
-    const longURL = urlDatabase[req.params.id];
+    const longURL = urlDatabase[req.params.id].longURL;
     res.redirect(longURL);
   }
 });
